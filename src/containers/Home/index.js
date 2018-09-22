@@ -11,10 +11,10 @@ import RecordsStore from "@/stores/Records"
 import { getNearestBoxes, checkGameCleared } from "@/utils/minemap"
 
 const MAP_SIZE = {
-  row: 3,
-  col: 3
+  row: 8,
+  col: 8
 }
-const MINE_COUNT = 2
+const MINE_COUNT = 12
 
 class HomeContainer extends Component {
   state = {
