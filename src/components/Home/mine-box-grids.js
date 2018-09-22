@@ -6,7 +6,7 @@ export default class MineBoxGrids extends React.Component {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "auto auto auto ",
+          gridTemplateColumns: "auto auto auto auto auto auto auto auto",
           width: "200px"
         }}
       >
