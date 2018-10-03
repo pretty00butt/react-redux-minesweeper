@@ -1,223 +1,181 @@
-import React, { Component } from "react"
-import { Container } from "flux/utils"
+import React, { Component } from 'react'
+import { bindActionCreators } from 'redux'
+import { connect } from 'react-redux'
 
-import HomeComponent from "@/components/Home"
+import HomeComponent from '@/components/Home'
 
-import { initGame, openBoxes, checkFlag } from "@/actions/MineMap"
-import MineMapStore from "@/stores/MineMap"
-import { getRecords, saveRecord } from "@/actions/Records"
-import RecordsStore from "@/stores/Records"
+import {
+  initGame,
+  startGame,
+  updateGameStatus,
+  updateRecord
+} from '@/redux/actions/GameStatus'
+import { initMap, openBoxes, setFlag } from '@/redux/actions/MineMap'
+import { getRecords, saveRecord } from '@/redux/actions/Records'
 
-import { getNearestBoxes, checkGameCleared } from "@/utils/minemap"
+import timer from '@/utils/timer'
 
 const MAP_SIZE = {
   row: 8,
   col: 8
 }
-const MINE_COUNT = 12
+const MINE_COUNT = 2
 
 class HomeContainer extends Component {
-  state = {
-    startTime: null,
-    endTime: null,
-    isGamePlaying: false,
-    isGameOver: false,
-    isGameCleared: false
-  }
-
-  componentWillMount() {
+  componentDidMount() {
     this.initGame()
-    this.getRecords()
+    this.props.getRecords()
   }
 
-  getRecords = () => {
-    getRecords()
-  }
-
-  saveRecord = record => {
-    saveRecord(record)
-  }
-
-  resetGame = () => {
-    this.clearTimer()
-    this.initGame()
-    this.setState(prevState => {
-      return {
-        startTime: null,
-        endTime: null,
-        isGamePlaying: false,
-        isGameOver: false,
-        isGameCleared: false
-      }
-    })
-  }
-
-  // Initialize All Map Data of Game
+  // Initialize  All Map Data of Game & Game Status
   initGame = () => {
-    initGame({
+    this.clearTimer()
+
+    this.props.initMap({
       rowSize: MAP_SIZE.row,
       colSize: MAP_SIZE.col,
       mineCount: MINE_COUNT
     })
+
+    this.props.initGame()
   }
 
-  startGame = cb => {
-    if (!this.timer) {
-      this.startTimer()
-    }
-
-    this.setState(prevState => {
-      return {
-        isGamePlaying: true
-      }
-    })
-  }
-
-  // 1. Check if the game is cleared
-  // 2. Check if the game is overed
-  // 3. Clear timer
-  endGame = ({ isGameOver, isGameCleared } = {}) => {
-    if (isGameCleared) {
-      const record = Math.abs(
-        this.state.endTime.getTime() - this.state.startTime.getTime()
+  // return true if the game has been started or false if already playing
+  startGame = () => {
+    if (
+      !(
+        this.props.isGamePlaying ||
+        this.props.isGameOver ||
+        this.props.isGameCleared
       )
-      alert(`GAME CLEARED!, RECORD: ${record}`)
-      this.saveRecord(record)
+    ) {
+      this.startTimer()
+      this.props.startGame()
+
+      return true
     }
 
-    if (isGameOver) {
-      alert("GAME OVER!")
-    }
+    return false
+  }
 
-    this.clearTimer()
-    this.setState(prevState => {
-      return {
-        isGameOver,
-        isGameCleared
-      }
-    })
+  resetGame = () => {
+    this.initGame()
   }
 
   startTimer = () => {
-    this.setState(prevState => {
-      return {
-        startTime: new Date(),
-        endTime: new Date()
-      }
+    timer.start(() => {
+      this.props.updateRecord(timer.record)
     })
-
-    this.timer = window.setInterval(() => {
-      this.setState(prevState => ({
-        endTime: new Date()
-      }))
-    }, 100)
   }
 
   clearTimer = () => {
-    window.clearInterval(this.timer)
-    this.timer = null
+    timer.finish()
   }
 
   rightClickMineBox = (row, col) => {
     // start the game if the right click is the first action
-    if (!this.state.isGamePlaying) {
-      this.startGame()
-    }
+    this.startGame()
 
-    let currentMineCount = Number(this.state.currentMineCount)
-    let mineFlagMap = [...this.state.mineFlagMap]
-
-    const isFlag = mineFlagMap[row][col]
-    if (isFlag) {
-      currentMineCount++
-      mineFlagMap[row][col] = 0
-      checkFlag({ mineFlagMap, currentMineCount })
-    } else if (!isFlag && currentMineCount) {
-      currentMineCount--
-      mineFlagMap[row][col] = 1
-      checkFlag({ mineFlagMap, currentMineCount })
-    }
+    this.props.setFlag({
+      row,
+      col,
+      mineOpenMap: this.props.mineOpenMap,
+      currentMineCount: Number(this.props.currentMineCount),
+      mineFlagMap: [...this.props.mineFlagMap]
+    })
   }
 
   clickMineBox = (row, col) => {
-    // start the game if the right click is the first action
-    if (!this.state.isGamePlaying) {
-      this.startGame()
-    }
+    // start the game if the click is the first action
+    const hasStarted = this.startGame()
 
-    let isGamePlaying = true
-    let isGameCleared = false
-    let isGameOver = false
-    let mineOpenMap = [...this.state.mineOpenMap]
+    let {
+      mineMap,
+      mineOpenMap,
+      mineCountMap,
+      isGameCleared,
+      isGameOver,
+      isGamePlaying
+    } = this.props
+    mineOpenMap = [...mineOpenMap]
+
+    // if the click event is the first action to start the game,
+    // `isGamePlaying` property could be false
+    // even though the game is playing
+    isGamePlaying = isGamePlaying || hasStarted
 
     // click action is working only if the game is not over or cleared
-    if (!this.state.isGameOver || !this.state.isGameCleared) {
-      // 1. Check Mine
-      isGameOver = this.checkMine(row, col, this.state.mineMap)
+    if (!isGameOver && !isGameCleared) {
+      // 1. Open Boxes the User clicks
+      this.props.openBoxes({
+        row,
+        col,
+        mineOpenMap,
+        mineCountMap
+      })
 
-      if (!isGameOver) {
-        // 2. Open Box
-        mineOpenMap = this.openBox(row, col, this.state.mineOpenMap)
-        openBoxes(mineOpenMap)
+      // 2. Update Game Status After Open Boxes
+      const updatedGameStatus = this.props.updateGameStatus({
+        row,
+        col,
+        mineMap,
+        mineOpenMap,
+        isGameCleared,
+        isGameOver,
+        isGamePlaying
+      })
 
-        // 3. Check Whether the game is cleared
-        isGameCleared = checkGameCleared({
-          mineMap: this.state.mineMap,
-          mineOpenMap
+      // 3. Finish the Game only if
+      // * the game is over or cleared
+      // * the game is playing
+      if (
+        (updatedGameStatus.isGameOver || updatedGameStatus.isGameCleared) &&
+        isGamePlaying
+      ) {
+        this.clearTimer()
+
+        this.showGameResult({
+          isGameOver: updatedGameStatus.isGameOver,
+          isGameCleared: updatedGameStatus.isGameCleared
         })
       }
     }
-
-    // 4. Check if the game is over or cleared
-    isGamePlaying = !(isGameOver || isGameCleared)
-    if (!isGamePlaying) {
-      this.endGame({
-        isGameOver,
-        isGameCleared
-      })
-    }
   }
 
-  checkMine = (row, col, mineMap) => {
-    let isMine = false
-    if (mineMap[row][col]) {
-      isMine = true
-    }
-    return isMine
-  }
+  // 1. Clear timer
+  // 2. Check if the game is cleared
+  // 3. Check if the game is overed
+  // 4. Update Game status
+  showGameResult = ({ isGameOver = false, isGameCleared = false } = {}) => {
+    if (isGameCleared) {
+      alert(`GAME CLEARED!, RECORD: ${this.props.record}`)
 
-  openBox = (row, col, mineOpenMap) => {
-    const { mineCountMap } = this.state
-
-    mineOpenMap[row][col] = 1
-    if (mineCountMap[row][col] === 0) {
-      const nearestBoxes = getNearestBoxes(row, col, MAP_SIZE.row, MAP_SIZE.col)
-      nearestBoxes.forEach(box => {
-        if (mineOpenMap[box.row][box.col] === 0) {
-          mineOpenMap = this.openBox(box.row, box.col, mineOpenMap)
-        }
-      })
+      // Save the Record If the User Clear the Game
+      this.props.saveRecord(this.props.record)
     }
 
-    return mineOpenMap
+    if (isGameOver) {
+      alert('GAME OVER!')
+    }
   }
 
   render() {
     return (
       <HomeComponent
-        records={this.state.records}
+        records={this.props.records}
         //- Records
 
-        endTime={this.state.endTime}
-        startTime={this.state.startTime}
-        isGamePlaying={this.state.isGamePlaying}
-        isGameCleared={this.state.isGameCleared}
-        isGameOver={this.state.isGameOver}
-        currentMineCount={this.state.currentMineCount}
-        mineMap={this.state.mineMap}
-        mineCountMap={this.state.mineCountMap}
-        mineOpenMap={this.state.mineOpenMap}
-        mineFlagMap={this.state.mineFlagMap}
+        record={this.props.record}
+        isGamePlaying={this.props.isGamePlaying}
+        isGameCleared={this.props.isGameCleared}
+        isGameOver={this.props.isGameOver}
+        // Game Status
+
+        currentMineCount={this.props.currentMineCount}
+        mineMap={this.props.mineMap}
+        mineCountMap={this.props.mineCountMap}
+        mineOpenMap={this.props.mineOpenMap}
+        mineFlagMap={this.props.mineFlagMap}
         //- Maps
 
         clickMineBox={this.clickMineBox}
@@ -230,10 +188,31 @@ class HomeContainer extends Component {
   }
 }
 
-HomeContainer.getStores = () => [MineMapStore, RecordsStore]
-HomeContainer.calculateState = prevState => ({
-  ...MineMapStore.getState(),
-  ...RecordsStore.getState()
+const mapStateToProps = state => ({
+  ...state.MineMap,
+  ...state.GameStatus,
+  ...state.Records
 })
 
-export default Container.create(HomeContainer)
+const mapDispatchToProps = dispatch =>
+  bindActionCreators(
+    {
+      initGame,
+      startGame,
+      updateGameStatus,
+      updateRecord,
+      // Game Status
+
+      initMap,
+      openBoxes,
+      setFlag,
+      // Map
+
+      getRecords,
+      saveRecord
+      // Records
+    },
+    dispatch
+  )
+
+export default connect(mapStateToProps, mapDispatchToProps)(HomeContainer)

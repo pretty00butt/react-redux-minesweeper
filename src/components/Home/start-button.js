@@ -1,7 +1,9 @@
-import React from "react"
+import React from 'react'
 
-export default ({ isGamePlaying, onClick } = {}) => {
+export default ({ needToReset, resetGame, startGame } = {}) => {
   return (
-    <button onClick={onClick}>{isGamePlaying ? "다시 시작" : "시작"}</button>
+    <button onClick={needToReset ? resetGame : startGame}>
+      {needToReset ? '다시 시작' : '시작'}
+    </button>
   )
 }

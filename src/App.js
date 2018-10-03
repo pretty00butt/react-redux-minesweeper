@@ -1,9 +1,19 @@
-import React, { Component } from "react"
+import React from 'react'
+import { Provider } from 'react-redux'
 
-import Routes from "./Routes"
+import Home from '@/containers/Home'
+import withReduxStore from '@/redux/store/with-redux-store'
 
-export default class App extends Component {
+class MyApp extends React.Component {
   render() {
-    return <Routes />
+    const { reduxStore } = this.props
+
+    return (
+      <Provider store={reduxStore}>
+        <Home />
+      </Provider>
+    )
   }
 }
+
+export default withReduxStore(MyApp)
